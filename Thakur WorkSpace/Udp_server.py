@@ -91,7 +91,7 @@ def display_images(label):
     frame_size = "N/A"  # Initialize frame size outside the loop
     while True:
         if not image_queue.empty():
-            image_bytes, timestamp,image_size = image_queue.get()
+            image_bytes, timestamp,image_size,radar_data= image_queue.get()
             i =0
             print("Capture Image, Radar Data Time Stamp:", timestamp)
             print("Current Time :",datetime.now())
