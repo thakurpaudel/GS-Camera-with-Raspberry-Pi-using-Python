@@ -92,25 +92,44 @@ def display_images(label):
     while True:
         if not image_queue.empty():
             image_bytes, timestamp,image_size = image_queue.get()
-            if int(image_size) != len(image_bytes):
-                print("Error in the image received")
-                print("Expected Image size is:",image_size)
-                print("Received Image size is:", len(image_bytes))
-                continue
-
-            frames_since_last_display += 1
+            i =0
+            print("Capture Image, Radar Data Time Stamp:", timestamp)
+            print("Current Time :",datetime.now())
+            time_diff = datetime.now() - timestamp
+            print("Lag in the time:",time_diff.total_seconds())
+            print("Received frame Rate Per seconds:",capture_fps)
+            frame_size = f"{Image.open(io.BytesIO(image_bytes)).size}"
+            print("Image size from the Camera :",frame_size)
+            
+            if len(radar_data) > 0:
+                 for obj in radar_data:
+                     # Extract the position, velocity, and distance for the current object
+                     position = obj['position']
+                     velocity = obj['velocity']
+                     distance = obj['distance']
+                     print(f"Position: {position}, Velocity: {velocity}, Distance: {distance}")
+            print("queue size:",image_queue.qsize())
+            image_queue.queue.clear()
+            continue
+#             if int(image_size) != len(image_bytes):
+#                 print("Error in the image received")
+#                 print("Expected Image size is:",image_size)
+#                 print("Received Image size is:", len(image_bytes))
+#                 continue
+# 
+#             frames_since_last_display += 1
             
             # Calculate FPS
-            current_time = datetime.now()
-            time_difference = (current_time - last_display_time).total_seconds()
-            if time_difference >= 1:  # Update FPS every second
-                fps = frames_since_last_display / time_difference
-                last_display_time = current_time
-                frames_since_last_display = 0
-                
-            frame_size = f"{Image.open(io.BytesIO(image_bytes)).size}"  # Calculate frame size
-            display_image_with_timestamp(image_bytes, timestamp, label, fps, frame_size)
-            image_queue.queue.clear()
+#             current_time = datetime.now()
+#             time_difference = (current_time - last_display_time).total_seconds()
+#             if time_difference >= 1:  # Update FPS every second
+#                 fps = frames_since_last_display / time_difference
+#                 last_display_time = current_time
+#                 frames_since_last_display = 0
+#                 
+#             frame_size = f"{Image.open(io.BytesIO(image_bytes)).size}"  # Calculate frame size
+#             display_image_with_timestamp(image_bytes, timestamp, label, fps, frame_size)
+#             image_queue.queue.clear()
 #         else:
 #             print("No image for the display")
             # If the image queue is empty, set FPS and frame size to N/A

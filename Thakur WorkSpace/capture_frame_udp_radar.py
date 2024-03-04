@@ -28,8 +28,8 @@ import os    #impor the system
 
 # Server's hostname or IP address
 #192.168.1.33:8888
-#SERVER_IP = '192.168.1.8'
-SERVER_IP = '192.168.1.33'
+SERVER_IP = '192.168.1.8'
+#SERVER_IP = '192.168.1.33'
 # The port used by the server
 SERVER_PORT = 8888
 server_address = SERVER_IP
@@ -336,6 +336,7 @@ def readAndParseData18xx(Dataport, configParameters):
                                 byteBufferLength = 0
         except ValueError as e:
             print("ValueError occurred:",e)
+            byteBufferLength=0
             return False,frameNumber,{}
 
     return dataOK, frameNumber, detObj
