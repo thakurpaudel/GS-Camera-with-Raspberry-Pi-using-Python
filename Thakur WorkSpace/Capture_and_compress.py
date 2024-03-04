@@ -5,6 +5,7 @@ from subprocess import Popen, PIPE
 from queue import Queue
 from threading import Thread
 from picamera2 import Picamera2  # Assuming this is your custom class for PiCamera
+from picamera2.controls import Controls
 
 last_capture_time = time.time()
 captured_frames = 0
@@ -24,7 +25,9 @@ def compress_images(images):
         print("Size of original image:", original_size, "bytes")
         
         # Compress the image using ffmpeg
-        p = Popen(['ffmpeg', '-y', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-f', 'image2pipe', '-'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        #p = Popen(['ffmpeg', '-y', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-f', 'image2pipe', '-'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        
+        p = Popen(['ffmpeg', '-y', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-r', '24', '-i', '-', '-q:v', '31', '-f', 'image2pipe', '-'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         p.stdin.write(image)
         p.stdin.close()
         compressed_image = p.stdout.read()
@@ -57,7 +60,10 @@ def capture_images(queue):
     picamera2.set_controls({'ExposureTime': 1})
     picamera2.set_controls({'FrameRate': 60})  # Set frame rate to 30 FPS
     picamera2.configure(capture_config)
-
+    with picamera2.controls as ctrl:
+        ctrl.AnalogueGain = 0.6
+        ctrl.ExposureTime = 30000
+    ctrls = Controls(picamera2)
     picamera2.start()
     time.sleep(2)
 
