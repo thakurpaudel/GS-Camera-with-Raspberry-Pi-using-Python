@@ -435,28 +435,6 @@ def capture_images(queue):
     
     while True:
         
-        image = io.BytesIO()
-        picamera2.capture_file(image, format='jpeg')
-        #image.seek(0)
-        #output_image = compress_image(image)
-        timestamp = datetime.now()
-        #print("Capture timeStamp:",timestamp)
-        
-#         print("capture frame",captured_frames);
-        # Calculate FPS for captureS
-        current_time = time.time()
-        time_diff = current_time - last_capture_time
-        if time_diff >= 1.0:
-            capture_fps = captured_frames / time_diff
-            radar_fps = radar_frame_count/time_diff;
-            print(f"Capture FPS: {capture_fps:.2f}")
-            print(f"Radar FPS: {radar_fps:.2f}")
-            last_capture_time = current_time
-            captured_frames = 0
-            radar_frame_count =0
-        else:
-            captured_frames += 1
-        
         try:
             # Update the data and check if the data is okay
             #dataOk = update()
@@ -480,15 +458,36 @@ def capture_images(queue):
                     
                 # Append object_info to the object_data list
                     object_data.append(object_info)
-
-        # Stop the program and close everything if Ctrl + c is pressed
+                image = io.BytesIO()
+                picamera2.capture_file(image, format='jpeg')
+                #image.seek(0)
+                #output_image = compress_image(image)
+                timestamp = datetime.now()
+                #print("Capture timeStamp:",timestamp)
+                
+        #         print("capture frame",captured_frames);
+                # Calculate FPS for captureS
+                current_time = time.time()
+                time_diff = current_time - last_capture_time
+                if time_diff >= 1.0:
+                    capture_fps = captured_frames / time_diff
+                    radar_fps = radar_frame_count/time_diff;
+                    print(f"Capture FPS: {capture_fps:.2f}")
+                    print(f"Radar FPS: {radar_fps:.2f}")
+                    last_capture_time = current_time
+                    captured_frames = 0
+                    radar_frame_count =0
+                else:
+                    captured_frames += 1
+                queue.put((image, timestamp,image.getbuffer().nbytes,object_data))
+                # Stop the program and close everything if Ctrl + c is pressed
         except KeyboardInterrupt:
-            CLIport.write(('sensorStop\n').encode())
-            CLIport.close()
-            Dataport.close()
-            win.close()
-            break
-        queue.put((image, timestamp,image.getbuffer().nbytes,object_data))
+                CLIport.write(('sensorStop\n').encode())
+                CLIport.close()
+                Dataport.close()
+                win.close()
+                break
+        
         
 def send_image_via_udp(queue, server_address, server_port):
     global last_send_time, sent_frames
@@ -505,7 +504,7 @@ def send_image_via_udp(queue, server_address, server_port):
              print("image size from the queue:",image_size)
              print("image size from the array:",image_size_bytes)
              continue
-        data = pickle.dumps((image.getvalue(), (timestamp),str(image_size),(radar_data)))
+        data = pickle.dumps((image.getvalue(), str(timestamp),str(image_size),str(radar_data)))
         #data = pickle.dumps((image.getvalue()))
         client_socket.sendto(start_signal, (server_address, server_port))
         chunks = [data[i:i+65507] for i in range(0, len(data), 65507)]
