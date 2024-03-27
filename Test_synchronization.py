@@ -5,15 +5,14 @@ import pickle
 from picamera2 import Picamera2
 import time
 from datetime import datetime
-from threading import Thread
+#from threading import Thread
 from queue import Queue
 import hashlib
 from picamera2.controls import Controls
 import io
 from PIL import Image
-
-
-
+import math
+import threading
 
 import sys
 sys.path.append('/home/rpi/myenv/lib/python3.11/site-packages')
@@ -31,10 +30,12 @@ import os    #impor the system
 # Server's hostname or IP address
 #192.168.1.33:8888
 #SERVER_IP = '192.168.1.8'
-SERVER_IP = '10.234.0.5'
+#SERVER_IP = '10.234.0.5'
 #SERVER_IP = '192.168.1.33'
 # The port used by the server
-SERVER_PORT = 8888
+#SERVER_PORT = 8888
+SERVER_IP = '192.168.1.8'
+SERVER_PORT = 12345
 server_address = SERVER_IP
 server_port = SERVER_PORT
 
@@ -44,6 +45,8 @@ end_signal = b"END_IMAGE"
 
 # Thread-safe queue
 image_queue = Queue()
+#Queue
+radar_queue = Queue()
 
 # Track timestamps for FPS calculation
 last_capture_time = time.time()
@@ -349,29 +352,58 @@ def update():
     # Read and parse the received data
     dataOk, frameNumber, detObj = readAndParseData18xx(Dataport, configParameters)
     
-#    if dataOk and len(detObj["x"]) > 0:
-        
-        # Print information about each detected object
-#         print("Number of objects detected:", detObj["numObj"])
-#         for i in range(detObj["numObj"]):
-#             print(f"Object {i+1}:")
-#             print(f"  - Position: ({detObj['x'][i]}, {detObj['y'][i]}, {detObj['z'][i]})")
-#             print(f"  - Distance: {np.linalg.norm([detObj['x'][i], detObj['y'][i], detObj['z'][i]])} meters")
-#             print(f"  - Velocity: {detObj['velocity'][i]} m/s")
-#             print()
-        
-        # Update the plot
-#         x = -detObj["x"]
-#         y = detObj["y"]
-#         s.setData(x, y)
-#         app.processEvents()
-    
     return dataOk
     
 def calculate_hash(data):
     return hashlib.sha256(data).hexdigest()
 
-def capture_images(queue):
+
+def radar_data_capture(radar_queue):
+    
+    print("End of the camera Seeting>>>>>>>>")
+    print("Start the Radar Seeting..................")
+    # Configurate the serial port
+    CLIport, Dataport = serialConfig(configFileName)
+
+    # Get the configuration parameters from the configuration file
+    configParameters = parseConfigFile(configFileName)
+    radar_frame_count =0
+    start_time = time.time()
+    while True:
+        object_data = []  # List to store data for each detected object
+        dataOk, frameNumber, detObj = readAndParseData18xx(Dataport, configParameters)
+        if dataOk and len(detObj["x"]) > 0:
+            radar_frame_count +=1;
+            for i in range (detObj["numObj"]):
+                # Store position data
+                position = (detObj['x'][i], detObj['y'][i], detObj['z'][i])
+                #calculate distance
+                distance = np.linalg.norm([detObj['x'][i], detObj['y'][i], detObj['z'][i]])
+                #Store Velocity data
+                velocity = detObj['velocity'][i]
+                # Store data for current object in a dictionary
+                object_info = {
+                    "position": position,
+                    "distance": distance,
+                    "velocity": velocity
+                    }
+                    
+                # Append object_info to the object_data list
+                object_data.append(object_info)
+            radar_timestamp =datetime.now()
+            radar_queue.put((object_data,radar_timestamp))
+            
+        difftime = time.time()- start_time
+        if difftime>1.0:
+            fbs =radar_frame_count/difftime
+            fbs =  math.ceil(fbs)
+            start_time = time.time()
+            print("Radar Data fbs:", fbs)
+            radar_frame_count=0
+            
+            
+
+def capture_image(image_queue):
     global last_capture_time, captured_frames,configParameters,p,s,win,app
     
     print("Starting of the camere Seeting>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
@@ -408,142 +440,194 @@ def capture_images(queue):
 
     print(f"Exposure Time: {picamera2.camera_controls['ExposureTime']}")
     
-    
     print("End of the camera Seeting>>>>>>>>")
-    print("Start the Radar Seeting..................");
-    # Configurate the serial port
-    CLIport, Dataport = serialConfig(configFileName)
 
-    # Get the configuration parameters from the configuration file
-    configParameters = parseConfigFile(configFileName)
-
-    # START QtAPPfor the plot
-    #app = QApplication([])
-    
-#     pg.setConfigOption('background', 'w')
-#     win = pg.GraphicsLayoutWidget(title="2D scatter plot")
-#     p = win.addPlot()
-#     p.setXRange(-0.5, 0.5)
-#     p.setYRange(0, 1.5)
-#     p.setLabel('left', text='Y position (m)')
-#     p.setLabel('bottom', text='X position (m)')
-#     #s = p.plot([], [], pen=None, symbol='o')
-    #win.show()
-    # Main loop 
-    detObj = {}  
-    frameData = {}    
-    currentIndex = 0
-    
-    radar_frame_count =0;
     
     while True:
         
         try:
-            # Update the data and check if the data is okay
-            #dataOk = update()
-            object_data = []  # List to store data for each detected object
-            dataOk, frameNumber, detObj = readAndParseData18xx(Dataport, configParameters)
-            if dataOk and len(detObj["x"]) > 0:
-                radar_frame_count +=1;
-                for i in range (detObj["numObj"]):
-                    # Store position data
-                    position = (detObj['x'][i], detObj['y'][i], detObj['z'][i])
-                    #calculate distance
-                    distance = np.linalg.norm([detObj['x'][i], detObj['y'][i], detObj['z'][i]])
-                    #Store Velocity data
-                    velocity = detObj['velocity'][i]
-                    # Store data for current object in a dictionary
-                    object_info = {
-                        "position": position,
-                        "distance": distance,
-                        "velocity": velocity
-                    }
-                    
-                # Append object_info to the object_data list
-                    object_data.append(object_info)
-                image = io.BytesIO()
-                picamera2.capture_file(image, format='jpeg')
-                #image.seek(0)
-                #output_image = compress_image(image)
-                timestamp = datetime.now()
-                #print("Capture timeStamp:",timestamp)
-                
-        #         print("capture frame",captured_frames);
-                # Calculate FPS for captureS
-                current_time = time.time()
-                time_diff = current_time - last_capture_time
-                if time_diff >= 1.0:
-                    capture_fps = captured_frames / time_diff
-                    radar_fps = radar_frame_count/time_diff;
-                    print(f"Capture FPS: {capture_fps:.2f}")
-                    print(f"Radar FPS: {radar_fps:.2f}")
-                    last_capture_time = current_time
-                    captured_frames = 0
-                    radar_frame_count =0
-                else:
-                    captured_frames += 1
-                queue.put((image, timestamp,image.getbuffer().nbytes,object_data))
+            image = io.BytesIO()
+            picamera2.capture_file(image, format='jpeg')
+            timestamp = datetime.now()
+            current_time = time.time()
+            image_size =image.getbuffer().nbytes
+            image_queue.put((image, timestamp, image_size))
+            time_diff = current_time - last_capture_time
+            if time_diff >= 1.0:
+                capture_fps = captured_frames / time_diff
+                capture_fps = math.ceil(capture_fps)
+                print(f"Capture FPS: {capture_fps:.2f}")
+                last_capture_time = current_time
+                captured_frames = 0
+            else:
+                captured_frames += 1
                 # Stop the program and close everything if Ctrl + c is pressed
         except KeyboardInterrupt:
-                CLIport.write(('sensorStop\n').encode())
-                CLIport.close()
-                Dataport.close()
-                win.close()
+#                 CLIport.write(('sensorStop\n').encode())
+#                 CLIport.close()
+#                 Dataport.close()
+#                 win.close()
                 break
         
         
-def send_image_via_udp(queue, server_address, server_port):
+# def send_image_via_udp(image_queue, radar_queue,server_address, server_port):
+#     global last_send_time, sent_frames
+# 
+#     while image_queue.empty():
+#         time.sleep(0.001)
+#     while radar_queue.empty():
+#         time.sleep(0.001)
+#     
+#     while True:
+#         image_data_array ={}
+#         radar_data_array = {}
+#         while image_queue.empty():
+#             time.sleep(0.01)
+#         while radar_queue.empty():
+#             time.sleep(0.01)
+#         while not image_queue.empty():
+#              image, timestamp, image_size = image_queue.get(block=False)
+#              image_data_array[timestamp] = (image,image_size)
+#         while not radar_queue.empty():
+#               radar_data, radar_timestamp = radar_queue.get(block=False)
+#               radar_data_array[radar_timestamp]=radar_data
+#               
+#         for image_timestamp, (image,image_size) in image_data_array.items():
+#             for radar_timestamp,radar_data  in radar_data_array.items():
+#                 time_difference = abs(image_timestamp - radar_timestamp).total_seconds()
+#                 if time_difference <= 0.03:
+# #                     print(f"Synchronized data found at timestamps: Image - {image_timestamp}, Radar - {radar_timestamp}")
+#                     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#                     image_data = image.getvalue()
+#                     image_size_bytes = len(image_data)
+#                     # here is the code to
+#                     if image_size !=image_size_bytes:
+#                          print("image size from the queue:",image_size)
+#                          print("image size from the array:",image_size_bytes)
+#                          continue
+#                     data = pickle.dumps((image.getvalue(), str(image_timestamp),str(image_size),(radar_data)))
+#                     #data = pickle.dumps((image.getvalue()))
+#                     client_socket.sendto(start_signal, (server_address, server_port))
+#                     chunks = [data[i:i+65507] for i in range(0, len(data), 65507)]
+#                     for chunk in chunks:
+#                         client_socket.sendto(chunk, (server_address, server_port))
+#                         # print(f"Sending chunk of size {len(chunk)} bytes.")
+#                     # Send end signal
+#                     client_socket.sendto(end_signal, (server_address, server_port))
+#                     client_socket.close()
+# 
+#                     # Calculate FPS for sending
+#                     current_time = time.time()
+#                     time_diff = current_time - last_send_time
+#                     if time_diff >= 1.0:
+#                         send_fps = sent_frames / time_diff
+#                         send_fps= math.ceil(send_fps)
+#                         print(f"Send FPS: {send_fps:.2f}")
+#                         last_send_time = current_time
+#                         sent_frames = 0
+#                     else:
+#                         sent_frames += 1
+#                 
+#                     # print("No image is in the queue to send the server")
+#
+
+
+def send_image_via_tcp(image_queue, radar_queue, server_address, server_port):
     global last_send_time, sent_frames
-    while True:
-        # Check the number of items in the queue
-        #print(f"Number of images in the queue: {queue.qsize()}")
-        image, timestamp, image_size,radar_data = queue.get()
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        image_data = image.getvalue()
-        image_size_bytes = len(image_data)
-        
-        # here is the code to
-        if image_size !=image_size_bytes:
-             print("image size from the queue:",image_size)
-             print("image size from the array:",image_size_bytes)
-             continue
-        data = pickle.dumps((image.getvalue(), str(timestamp),str(image_size),str(radar_data)))
-        #data = pickle.dumps((image.getvalue()))
-        client_socket.sendto(start_signal, (server_address, server_port))
-        chunks = [data[i:i+65507] for i in range(0, len(data), 65507)]
-        for chunk in chunks:
-            client_socket.sendto(chunk, (server_address, server_port))
-            # print(f"Sending chunk of size {len(chunk)} bytes.")
-        # Send end signal
-        client_socket.sendto(end_signal, (server_address, server_port))
+
+    while image_queue.empty() or radar_queue.empty():
+        time.sleep(0.001)
+
+    # Establish TCP connection to the server
+    
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((server_address, server_port))
+
+    try:
+        while True:
+            image_data_array = {}
+            radar_data_array = {}
+            while image_queue.empty() or radar_queue.empty():
+                time.sleep(0.01)
+
+            while not image_queue.empty():
+                image, timestamp, image_size = image_queue.get(block=False)
+                image_data_array[timestamp] = (image, image_size)
+
+            while not radar_queue.empty():
+                radar_data, radar_timestamp = radar_queue.get(block=False)
+                radar_data_array[radar_timestamp] = radar_data
+
+            for image_timestamp, (image, image_size) in image_data_array.items():
+                for radar_timestamp, radar_data in radar_data_array.items():
+                    time_difference = abs(image_timestamp - radar_timestamp).total_seconds()
+                    if time_difference <= 0.03:
+                        image_data = image.getvalue()
+                        image_size_bytes = len(image_data)
+                        if image_size != image_size_bytes:
+                            print("Image size from the queue:", image_size)
+                            print("Image size from the array:", image_size_bytes)
+                            continue
+
+                        data = pickle.dumps((image.getvalue(), str(image_timestamp), str(image_size), radar_data))
+                        # Send the size of the pickle first
+                        client_socket.sendall(len(data).to_bytes(4, 'big'))
+                        # Then send the pickle itself
+                        client_socket.sendall(data)
+
+                        # Calculate FPS for sending
+                        current_time = time.time()
+                        time_diff = current_time - last_send_time
+                        if time_diff >= 1.0:
+                            send_fps = sent_frames / time_diff
+                            send_fps = math.ceil(send_fps)
+                            print(f"Send FPS: {send_fps:.2f}")
+                            last_send_time = current_time
+                            sent_frames = 0
+                        else:
+                            sent_frames += 1
+
+    finally:
         client_socket.close()
 
-        # Calculate FPS for sending
-        current_time = time.time()
-        time_diff = current_time - last_send_time
-        if time_diff >= 1.0:
-            send_fps = sent_frames / time_diff
-            print(f"Send FPS: {send_fps:.2f}")
-            last_send_time = current_time
-            sent_frames = 0
-        else:
-            sent_frames += 1
-        # print("No image is in the queue to send the server")
+# Globals for FPS calculation, ensure these are initialized appropriately in your main script
+last_send_time = time.time()
+sent_frames = 0
 
 
 def main():
     # Start the image capture thread
-    capture_thread = Thread(target=capture_images, args=(image_queue,))
-    capture_thread.daemon = True
-    capture_thread.start()
+    
+    
+    image_thread = threading.Thread(target=capture_image, args=(image_queue,))
+    radar_thread = threading.Thread(target=radar_data_capture, args=(radar_queue,))
+    send_thread = threading.Thread(target=send_image_via_tcp, args=(image_queue, radar_queue, server_address, server_port))
+    
+#     capture_thread = Thread(target=capture_images, args=(image_queue,))
+#     capture_thread.daemon = True
+#     capture_thread.start()
 
     # Start the image sending thread
-    sending_thread = Thread(target=send_image_via_udp, args=(image_queue, server_address, server_port))
-    sending_thread.daemon = True
-    sending_thread.start()
-
-    capture_thread.join()
-    sending_thread.join()
+#     sending_thread = Thread(target=send_image_via_udp, args=(image_queue,radar_queue, server_address, server_port))
+#     sending_thread.daemon = True
+#     sending_thread.start()
+    
+#     radar_thread = Thread(target=radar_data_capture)
+#     radar_thread.daemon = True
+#     radar_thread.start()
+#     
+#     radar_data_capture
+# # Start all threads
+    radar_thread.start()
+    image_thread.start()
+    send_thread.start()
+    
+    radar_thread.join()
+    image_thread.join()
+    send_thread.join()
+#     capture_thread.join()
+#     sending_thread.join()
+#     radar_thread.join()
 
 if __name__ == "__main__":
     main()
